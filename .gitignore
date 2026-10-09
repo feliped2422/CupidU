@@ -1,0 +1,17 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+
+#ambiente virtual
+venv/
+
+#configurações locais e chaves de API
+.env
+pyvenv.cfg
+
+#cache e compilados
+*.pyc
+__pycache__/
+
+# Configurações do editor
+.vscode/
+.idea/
+
