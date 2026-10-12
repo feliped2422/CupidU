@@ -40,6 +40,10 @@ Ele permite que usuários façam login, obtenham tokens JWT do Supabase e consul
   - todas as chaves são encontradas dentro do supabase
   - a DB_PASSWORD só é fornecida pelo dono do projeto no supabase
 
+5. Rodando no servidor
+   ```bash
+   python manage.py runserver
+
 ## 🔑 Autenticação
 O login gera um access_token JWT do supabase
 esse token deve ser usado nos headers das requisições
@@ -56,6 +60,11 @@ No Insomnia ->
  - Authorization: Bearer SEU_ACCESS_TOKEN
    
  O indicio que funcionou é a resposta `200 OK`
+
+ -para conseguir o SEU_ACCESS_TOKEN, rode na raiz do projeto
+   ```bash
+    python login.py
+ 
   
    
  
