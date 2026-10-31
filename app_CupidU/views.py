@@ -46,20 +46,26 @@ class SignupView(APIView):
         serializer.is_valid(raise_exception=True)  # domínio errado -> 400
 
         try:
-            novo_cliente().auth.sign_up({
+            response = novo_cliente().auth.sign_up({
                 "email": serializer.validated_data["email"],
                 "password": serializer.validated_data["password"],
             })
-        except Exception:
+
             return Response(
-                {"detail": "Não foi possível concluir o cadastro."},
-                status=status.HTTP_400_BAD_REQUEST,
+                {
+                    "detail": "Cadastro realizado com sucesso.",
+                    "data": str(response)
+                },
+                status=status.HTTP_201_CREATED,
             )
 
-        return Response(
-            {"detail": "Código de 6 dígitos enviado para o seu e-mail."},
-            status=status.HTTP_201_CREATED,
-        )
+        except Exception as e:
+            print("ERRO SIGNUP:", e)
+
+            return Response(
+            {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+    )
 
 
 class LoginView(APIView):
@@ -130,17 +136,18 @@ class ResendOtpView(APIView):
         serializer.is_valid(raise_exception=True)
 
         try:
-            novo_cliente().auth.resend({
+            response = novo_cliente().auth.resend({
                 "type": "signup",
                 "email": serializer.validated_data["email"],
             })
-        except Exception:
+
+        except Exception as e:
+            print("ERRO RESEND:", e)
+
             return Response(
-                {"detail": "Não foi possível reenviar o código."},
+                {"detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        return Response({"detail": "Código reenviado para o seu e-mail."})
 
 
 class PerfilCreateView(APIView):

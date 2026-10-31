@@ -31,8 +31,8 @@ class LoginSerializer(serializers.Serializer):
 class VerifyOtpSerializer(serializers.Serializer):
     email = serializers.EmailField()
     token = serializers.RegexField(
-        regex=r"^\d{6}$",
-        error_messages={"invalid": "O código deve ter 6 dígitos."},
+        regex=r"^\d{8}$",
+        error_messages={"invalid": "O código deve ter 8 dígitos."},
     )
 
     def validate_email(self, value):
