@@ -12,3 +12,4 @@ user = supabase.auth.sign_in_with_password({
 })
 
 print("Access token:", user.session.access_token)
+
