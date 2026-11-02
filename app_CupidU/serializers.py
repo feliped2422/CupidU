@@ -1,10 +1,10 @@
 from rest_framework import serializers
-
+ 
 from .models import Perfil
-
+ 
 DOMINIO_PERMITIDO = "sempreunama.com.br"
-
-
+ 
+ 
 def _valida_dominio(value):
     """Aceita só e-mails do domínio institucional e devolve o e-mail normalizado."""
     email = value.strip().lower()
@@ -13,48 +13,60 @@ def _valida_dominio(value):
             "Use seu e-mail institucional @sempreunama.com.br."
         )
     return email
-
-
+ 
+ 
 class SignupSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(min_length=8, write_only=True)
-
+ 
     def validate_email(self, value):
         return _valida_dominio(value)
-
-
+ 
+ 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
-
-
+ 
+ 
 class VerifyOtpSerializer(serializers.Serializer):
     email = serializers.EmailField()
     token = serializers.RegexField(
         regex=r"^\d{8}$",
         error_messages={"invalid": "O código deve ter 8 dígitos."},
     )
-
+ 
     def validate_email(self, value):
         return _valida_dominio(value)
-
-
+ 
+ 
 class ResendOtpSerializer(serializers.Serializer):
     email = serializers.EmailField()
-
+ 
     def validate_email(self, value):
         return _valida_dominio(value)
-
-
+ 
+ 
 class PerfilSerializer(serializers.ModelSerializer):
     fotos = serializers.ListField(
         child=serializers.URLField(), min_length=1, max_length=6
     )
-
+    bio = serializers.CharField(max_length=300, required=False, allow_blank=True)
+ 
     class Meta:
         model = Perfil
         fields = [
             "id", "nome", "idade", "curso", "campus",
-            "orientacao", "estado_civil", "fotos",
+            "orientacao", "estado_civil", "fotos", "bio",
         ]
         read_only_fields = ["id"]
+ 
+ 
+class FeedPerfilSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Perfil
+        fields = ["id", "nome", "idade", "curso", "campus", "fotos", "bio"]
+ 
+ 
+class RejeitarSerializer(serializers.Serializer):
+    perfil_id = serializers.IntegerField()
+ 
