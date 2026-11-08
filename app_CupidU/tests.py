@@ -10,7 +10,7 @@ def _resposta_com_sessao():
 
 class VerifyOtpTests(APISimpleTestCase):
     url = "/api/auth/verify-otp"
-    dados = {"email": "joao@sempreunama.com.br", "token": "123456"}
+    dados = {"email": "joao@sempreunama.com.br", "token": "12345678"}
 
     @patch("app_CupidU.views.novo_cliente")
     def test_codigo_correto_devolve_tokens(self, novo_cliente):
@@ -37,7 +37,7 @@ class VerifyOtpTests(APISimpleTestCase):
 
     @patch("app_CupidU.views.novo_cliente")
     def test_formato_invalido_nem_chama_o_supabase(self, novo_cliente):
-        for token in ("12345", "1234567", "12ab56", ""):
+        for token in ("1234567", "123456789", "1234abcd", ""):
             r = self.client.post(
                 self.url,
                 {"email": "joao@sempreunama.com.br", "token": token},
@@ -49,8 +49,8 @@ class VerifyOtpTests(APISimpleTestCase):
     @patch("app_CupidU.views.novo_cliente")
     def test_email_fora_do_dominio_devolve_400(self, novo_cliente):
         r = self.client.post(
-            self.url, {"email": "a@gmail.com", "token": "123456"}, format="json"
-        )
+    self.url, {"email": "a@gmail.com", "token": "12345678"}, format="json"
+)
         self.assertEqual(r.status_code, 400)
         novo_cliente.assert_not_called()
 

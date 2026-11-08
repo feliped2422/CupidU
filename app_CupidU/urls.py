@@ -8,6 +8,8 @@ from .views import (
     ResendOtpView,
     PerfilCreateView,
     PerfilMeView,
+    FeedView,
+    RejeitarView,
 )
 
 urlpatterns = [
@@ -18,4 +20,6 @@ urlpatterns = [
     path("auth/resend-otp", ResendOtpView.as_view(), name="resend-otp"),
     path("perfis/", PerfilCreateView.as_view(), name="perfil-criar"),
     path("perfis/me/", PerfilMeView.as_view(), name="perfil-me"),
+    path("feed/", FeedView.as_view(), name="feed"),
+    path("rejeitar/", RejeitarView.as_view(), name="rejeitar"),
 ]
