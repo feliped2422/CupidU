@@ -43,12 +43,28 @@ Ele permite que usuários façam login, obtenham tokens JWT do Supabase e consul
 
 5. Rodando no servidor
    ```bash
-   entre no cmd e pesquise ipconfig, o valor no ipv4 deve ser copiado
-   e colocado junto a porta que estiver rodando -> xx.xx.xxx.xxx:8000
+   Descubra seu IPv4 usando:
+   ipconfig
+   ```
 
-   python manage.py runserver ipva4:8000
+   Copie o endereço IPv4 e execute:
 
+   ```bash
+   python manage.py runserver SEU_IP:8000
+   ```
 
+   Exemplo:
+
+   ```bash
+   python manage.py runserver xxx.xxx.x.xx:8000
+   ```   
+   Com ele rodando, 
+   ```bash
+   adicione /api/ após a porta 
+   exemplo: xxx.xxx.x.xx:8000/api/
+
+   assim terá acesso a toda as rotas da api após essa
+   ```
   
    
  
