@@ -10,6 +10,7 @@ Ele permite que usuários façam login, obtenham tokens JWT do Supabase e consul
 - Django
 - Django REST Framework
 - Supabase (PostgreSQL + Auth)
+- Brevo (envio de OTP)
 - Insomnia (para testes de API)
 
 ---
@@ -33,38 +34,21 @@ Ele permite que usuários façam login, obtenham tokens JWT do Supabase e consul
    pip install -r requirements.tx
 
 4. configure .env
-  - crie um arquivo chamado .env na raiz do projeto
-  - copie o conteúdo de .env.example e cole em .env
-  - depois disso pode apagar o .env.example
-  - agora preencha os campos que faltam em .env
-  - todas as chaves são encontradas dentro do supabase
-  - a DB_PASSWORD só é fornecida pelo dono do projeto no supabase
+   ```bash
+   - crie um arquivo chamado .env na raiz do projeto
+   - copie o conteúdo de .env.example e cole em .env
+   - agora preencha os campos que faltam em .env
+   - todas as chaves são encontradas dentro do supabase
+   - a DB_PASSWORD só é fornecida pelo dono do projeto no supabase
 
 5. Rodando no servidor
    ```bash
-   python manage.py runserver
+   entre no cmd e pesquise ipconfig, o valor no ipv4 deve ser copiado
+   e colocado junto a porta que estiver rodando -> xx.xx.xxx.xxx:8000
 
-## 🔑 Autenticação
-O login gera um access_token JWT do supabase
-esse token deve ser usado nos headers das requisições
+   python manage.py runserver ipva4:8000
 
-No Insomnia ->
 
-1. Crie uma requisição GET para `https://sgcoqululbosblwicmwz.supabase.co/rest/v1/profiles`
- - no lugar de `profiles` coloque oq deseja acessar
- - isso irá permitir ter acesso aos dados do banco
-   
-2. Adicione os headers
- - Content-Type: application/json
- - apikey: SUA_ANON_KEY
- - Authorization: Bearer SEU_ACCESS_TOKEN
-   
- O indicio que funcionou é a resposta `200 OK`
-
- -para conseguir o SEU_ACCESS_TOKEN, rode na raiz do projeto
-   ```bash
-    python login.py
- 
   
    
  
