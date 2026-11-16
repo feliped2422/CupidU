@@ -1,13 +1,13 @@
 import os
 
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from supabase import create_client
-
-from supabase_client import url, key
+from supabase_client import url, key,supabase
 from .models import Perfil
 from .serializers import (
     SignupSerializer,
@@ -106,13 +106,16 @@ class VerifyOtpView(APIView):
         resposta = None
         for tipo in ("email", "signup"):
             try:
-                resposta = novo_cliente().auth.verify_otp(
-                    {"email": email, "token": token, "type": tipo}
-                )
+                resposta = supabase.auth.verify_otp({
+                    "email": email,
+                    "token": token,
+                    "type": tipo,
+                })
             except Exception:
                 resposta = None
                 continue
-            if resposta.session is not None:
+
+            if resposta is not None and resposta.session is not None:
                 break
 
         if resposta is None or resposta.session is None:
@@ -121,9 +124,11 @@ class VerifyOtpView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        session = resposta.session
+
         return Response({
-            "access_token": resposta.session.access_token,
-            "refresh_token": resposta.session.refresh_token,
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
         })
 
 
@@ -136,18 +141,18 @@ class ResendOtpView(APIView):
         serializer.is_valid(raise_exception=True)
 
         try:
-            response = novo_cliente().auth.resend({
+            novo_cliente().auth.resend({
                 "type": "signup",
                 "email": serializer.validated_data["email"],
             })
-
         except Exception as e:
             print("ERRO RESEND:", e)
-
             return Response(
                 {"detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        return Response({"detail": "Código reenviado."})
 
 
 class PerfilCreateView(APIView):
@@ -174,23 +179,32 @@ class PerfilMeView(APIView):
     def _perfil(self, request):
         return Perfil.objects.filter(user_id=request.user.get("sub")).first()
 
+    def _nao_encontrado(self):
+        return Response(
+            {"detail": "Perfil não encontrado."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
     def get(self, request):
         perfil = self._perfil(request)
         if perfil is None:
-            return Response(
-                {"detail": "Perfil não encontrado."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return self._nao_encontrado()
         return Response(PerfilSerializer(perfil).data)
 
     def put(self, request):
         perfil = self._perfil(request)
         if perfil is None:
-            return Response(
-                {"detail": "Perfil não encontrado."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return self._nao_encontrado()
         serializer = PerfilSerializer(perfil, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def patch(self, request):
+        perfil = self._perfil(request)
+        if perfil is None:
+            return self._nao_encontrado()
+        serializer = PerfilSerializer(perfil, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
@@ -198,10 +212,7 @@ class PerfilMeView(APIView):
     def delete(self, request):
         perfil = self._perfil(request)
         if perfil is None:
-            return Response(
-                {"detail": "Perfil não encontrado."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            return self._nao_encontrado()
         user_id = request.user.get("sub")
         try:
             with transaction.atomic():

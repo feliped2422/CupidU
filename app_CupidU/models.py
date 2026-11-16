@@ -26,6 +26,7 @@ class Perfil(models.Model):
     campus = models.CharField(max_length=100)
     orientacao = models.CharField(max_length=20, choices=Orientacao.choices)
     estado_civil = models.CharField(max_length=20, choices=EstadoCivil.choices)
+    bio = models.TextField(blank=True, default="")
     fotos = models.JSONField(default=list)  # lista de URLs das fotos
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)

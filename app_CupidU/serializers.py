@@ -55,6 +55,6 @@ class PerfilSerializer(serializers.ModelSerializer):
         model = Perfil
         fields = [
             "id", "nome", "idade", "curso", "campus",
-            "orientacao", "estado_civil", "fotos",
+            "orientacao", "estado_civil", "bio", "fotos",
         ]
         read_only_fields = ["id"]
