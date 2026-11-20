@@ -1,5 +1,6 @@
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import F, Q
 
 
 class Perfil(models.Model):
@@ -36,3 +37,39 @@ class Perfil(models.Model):
 
     def __str__(self):
         return self.nome
+
+
+class Curtida(models.Model):
+    """Registra a ação de um usuário sobre outro (like/dislike) e o estado do match."""
+
+    class Tipo(models.TextChoices):
+        LIKE = "LIKE", "Like"
+        DISLIKE = "DISLIKE", "Dislike"
+
+    # UUIDs dos usuários (mesmo valor de Perfil.user_id / "sub" do JWT)
+    autor_id = models.UUIDField(db_index=True)
+    alvo_id = models.UUIDField(db_index=True)
+    tipo = models.CharField(max_length=7, choices=Tipo.choices, default=Tipo.LIKE)
+
+    # True nas DUAS linhas (A->B e B->A) quando há curtida recíproca
+    match = models.BooleanField(default=False)
+
+    # ID do canal no Stream Chat (preenchido quando há match)
+    canal_id = models.CharField(max_length=64, blank=True, default="")
+
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "curtidas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["autor_id", "alvo_id"], name="curtida_unica_por_par"
+            ),
+            models.CheckConstraint(
+                condition=~Q(autor_id=F("alvo_id")),
+                name="curtida_nao_em_si_mesmo",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.autor_id} -> {self.alvo_id} ({self.tipo}, match={self.match})"

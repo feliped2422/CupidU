@@ -48,13 +48,26 @@ class ResendOtpSerializer(serializers.Serializer):
 
 class PerfilSerializer(serializers.ModelSerializer):
     fotos = serializers.ListField(
-        child=serializers.URLField(), min_length=1, max_length=6
+        child=serializers.URLField(),
+        min_length=1,
+        max_length=6
     )
 
     class Meta:
         model = Perfil
         fields = [
-            "id", "nome", "idade", "curso", "campus",
-            "orientacao", "estado_civil", "bio", "fotos",
+            "id",
+            "nome",
+            "idade",
+            "curso",
+            "campus",
+            "orientacao",
+            "estado_civil",
+            "bio",
+            "fotos",
         ]
         read_only_fields = ["id"]
+
+
+class RejeitarSerializer(serializers.Serializer):
+    alvo_id = serializers.IntegerField()

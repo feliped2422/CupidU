@@ -1,6 +1,6 @@
 import os
-
-from django.db import transaction
+import uuid
+from django.db import connection, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -8,13 +8,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from supabase import create_client
 from supabase_client import url, key,supabase
-from .models import Perfil
+from .models import Curtida, Perfil
 from .serializers import (
     SignupSerializer,
     LoginSerializer,
     VerifyOtpSerializer,
     ResendOtpSerializer,
     PerfilSerializer,
+    RejeitarSerializer
 )
 
 
@@ -224,3 +225,216 @@ class PerfilMeView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+def _travar_par(user_a, user_b):
+    """Lock por par de usuários até o fim da transação."""
+    chave = "".join(sorted([str(user_a), str(user_b)]))
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", [chave])
+
+class FeedView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        meu_id = uuid.UUID(request.user.get("sub"))
+
+        meu_perfil = Perfil.objects.filter(user_id=meu_id).first()
+        if meu_perfil is None:
+            return Response(
+                {"detail": "Complete seu perfil para ver o feed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            limite = int(request.query_params.get("limit", 10))
+        except ValueError:
+            limite = 10
+        limite = max(1, min(limite, 30))
+
+        # Todo mundo que eu já flechei ou rejeitei
+        ja_avaliados = Curtida.objects.filter(autor_id=meu_id).values("alvo_id")
+
+        perfis = (
+            Perfil.objects.filter(campus__iexact=meu_perfil.campus.strip())
+            .exclude(user_id=meu_id)
+            .exclude(user_id__in=ja_avaliados)
+            .order_by("-criado_em")[:limite]
+        )
+
+        return Response(PerfilSerializer(perfis, many=True).data)
+
+class RejeitarView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = RejeitarSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        autor_id = uuid.UUID(request.user.get("sub"))
+
+        if not Perfil.objects.filter(user_id=autor_id).exists():
+            return Response(
+                {"detail": "Complete seu perfil antes de usar o feed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        alvo = Perfil.objects.filter(id=serializer.validated_data["alvo_id"]).first()
+        if alvo is None:
+            return Response(
+                {"detail": "Perfil não encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if alvo.user_id == autor_id:
+            return Response(
+                {"detail": "Você não pode rejeitar o próprio perfil."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            _travar_par(autor_id, alvo.user_id)
+
+            curtida, criada = Curtida.objects.get_or_create(
+                autor_id=autor_id,
+                alvo_id=alvo.user_id,
+                defaults={"tipo": Curtida.Tipo.DISLIKE},
+            )
+
+            # Um match existente não pode ser desfeito por um toque de rejeitar
+            if not criada and curtida.match:
+                return Response(
+                    {"rejeitado": False, "detail": "Vocês já têm match."},
+                    status=status.HTTP_200_OK,
+                )
+
+            if not criada and curtida.tipo != Curtida.Tipo.DISLIKE:
+                curtida.tipo = Curtida.Tipo.DISLIKE
+                curtida.save(update_fields=["tipo"])
+
+        return Response(
+            {"rejeitado": True},
+            status=status.HTTP_201_CREATED if criada else status.HTTP_200_OK,
+        )
+
+class CurtirView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = RejeitarSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        autor_id = uuid.UUID(request.user.get("sub"))
+
+        if not Perfil.objects.filter(user_id=autor_id).exists():
+            return Response(
+                {"detail": "Complete seu perfil antes de usar o feed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        alvo = Perfil.objects.filter(
+            id=serializer.validated_data["alvo_id"]
+        ).first()
+
+        if alvo is None:
+            return Response(
+                {"detail": "Perfil não encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if alvo.user_id == autor_id:
+            return Response(
+                {"detail": "Você não pode curtir o próprio perfil."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            _travar_par(autor_id, alvo.user_id)
+
+            curtida, criada = Curtida.objects.get_or_create(
+                autor_id=autor_id,
+                alvo_id=alvo.user_id,
+                defaults={"tipo": Curtida.Tipo.LIKE},
+            )
+
+            if not criada:
+                curtida.tipo = Curtida.Tipo.LIKE
+                curtida.save(update_fields=["tipo"])
+
+            curtida_reciproca = Curtida.objects.filter(
+                autor_id=alvo.user_id,
+                alvo_id=autor_id,
+                tipo=Curtida.Tipo.LIKE,
+            ).first()
+
+            match = False
+
+            if curtida_reciproca:
+                match = True
+
+                Curtida.objects.filter(
+                    autor_id=autor_id,
+                    alvo_id=alvo.user_id,
+                ).update(match=True)
+
+                Curtida.objects.filter(
+                    autor_id=alvo.user_id,
+                    alvo_id=autor_id,
+                ).update(match=True)
+
+        return Response(
+            {
+                "curtido": True,
+                "match": match,
+            },
+            status=status.HTTP_201_CREATED if criada else status.HTTP_200_OK,
+        )
+
+class CurtidasRecebidasView(APIView):
+    """Perfis que curtiram o usuário logado e que ele ainda não respondeu."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        meu_id = uuid.UUID(request.user.get("sub"))
+
+        ja_respondi = Curtida.objects.filter(autor_id=meu_id).values("alvo_id")
+
+        autores = (
+            Curtida.objects.filter(alvo_id=meu_id, tipo=Curtida.Tipo.LIKE)
+            .exclude(autor_id__in=ja_respondi)
+            .values("autor_id")
+        )
+
+        perfis = Perfil.objects.filter(user_id__in=autores).order_by("-criado_em")
+        return Response(PerfilSerializer(perfis, many=True).data)
+
+
+class MatchesView(APIView):
+    """Matches do usuário logado, do mais recente para o mais antigo."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        meu_id = uuid.UUID(request.user.get("sub"))
+
+        matches = list(
+            Curtida.objects.filter(autor_id=meu_id, match=True).order_by("-criado_em")
+        )
+
+        perfis = {
+            p.user_id: p
+            for p in Perfil.objects.filter(user_id__in=[m.alvo_id for m in matches])
+        }
+
+        dados = []
+        for m in matches:
+            perfil = perfis.get(m.alvo_id)
+            if perfil is not None:
+                dados.append(
+                    {
+                        "canal_id": m.canal_id,
+                        "perfil": PerfilSerializer(perfil).data,
+                    }
+                )
+
+        return Response(dados)

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    FeedView,
     ProfileProtectedView,
     SignupView,
     LoginView,
@@ -8,6 +9,12 @@ from .views import (
     ResendOtpView,
     PerfilCreateView,
     PerfilMeView,
+    RejeitarView,
+    CurtirView,
+    CurtidasRecebidasView,
+    MatchesView
+
+     # FlecharView,   # descomente quando a view do flechar estiver no views.py
 )
 
 urlpatterns = [
@@ -18,4 +25,10 @@ urlpatterns = [
     path("auth/resend-otp", ResendOtpView.as_view(), name="resend-otp"),
     path("perfis/", PerfilCreateView.as_view(), name="perfil-criar"),
     path("perfis/me/", PerfilMeView.as_view(), name="perfil-me"),
+    path("feed/", FeedView.as_view(), name="feed"),
+    path("feed/curtir/", CurtirView.as_view(), name="feed-curtir"),
+    path("feed/rejeitar/", RejeitarView.as_view(), name="feed-rejeitar"),
+    path("feed/curtidas/recebidas/", CurtidasRecebidasView.as_view(), name="curtidas-recebidas"),
+    path("feed/matches/", MatchesView.as_view(), name="matches"),
+    # path("flechar/", FlecharView.as_view(), name="flechar"),
 ]
