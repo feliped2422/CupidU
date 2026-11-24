@@ -1,5 +1,6 @@
 import os
 import uuid
+from django.db.models import Q
 from django.db import connection, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -8,14 +9,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from supabase import create_client
 from supabase_client import url, key,supabase
-from .models import Curtida, Perfil
+from .models import Curtida, Mensagem, Perfil
 from .serializers import (
     SignupSerializer,
     LoginSerializer,
     VerifyOtpSerializer,
     ResendOtpSerializer,
     PerfilSerializer,
-    RejeitarSerializer
+    RejeitarSerializer,
+    EnviarMensagemSerializer,
 )
 
 
@@ -347,6 +349,8 @@ class CurtirView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        canal_id = None
+
         with transaction.atomic():
             _travar_par(autor_id, alvo.user_id)
 
@@ -355,8 +359,7 @@ class CurtirView(APIView):
                 alvo_id=alvo.user_id,
                 defaults={"tipo": Curtida.Tipo.LIKE},
             )
-
-            if not criada:
+            if not criada and curtida.tipo != Curtida.Tipo.LIKE:
                 curtida.tipo = Curtida.Tipo.LIKE
                 curtida.save(update_fields=["tipo"])
 
@@ -366,26 +369,24 @@ class CurtirView(APIView):
                 tipo=Curtida.Tipo.LIKE,
             ).first()
 
-            match = False
+            match = curtida_reciproca is not None
 
-            if curtida_reciproca:
-                match = True
+        if match:
+            # Mesmo canal para os dois lados (determinístico, sem depender de ordem)
+            a, b = sorted([str(autor_id), str(alvo.user_id)])
+            canal_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"canal:{a}:{b}"))
 
-                Curtida.objects.filter(
-                    autor_id=autor_id,
-                    alvo_id=alvo.user_id,
-                ).update(match=True)
+            Curtida.objects.filter(
+            Q(autor_id=autor_id, alvo_id=alvo.user_id)
+            | Q(autor_id=alvo.user_id, alvo_id=autor_id)
+            ).update(match=True, canal_id=canal_id)
 
-                Curtida.objects.filter(
-                    autor_id=alvo.user_id,
-                    alvo_id=autor_id,
-                ).update(match=True)
-
+        resposta = {"curtido": True, "match": match}
+        if match:
+            resposta["canal_id"] = canal_id
+            resposta["perfil"] = PerfilSerializer(alvo).data    
         return Response(
-            {
-                "curtido": True,
-                "match": match,
-            },
+            resposta,
             status=status.HTTP_201_CREATED if criada else status.HTTP_200_OK,
         )
 
@@ -410,7 +411,7 @@ class CurtidasRecebidasView(APIView):
 
 
 class MatchesView(APIView):
-    """Matches do usuário logado, do mais recente para o mais antigo."""
+    """Matches/conversas do usuário logado, com última mensagem e não lidas."""
 
     permission_classes = [IsAuthenticated]
 
@@ -418,7 +419,7 @@ class MatchesView(APIView):
         meu_id = uuid.UUID(request.user.get("sub"))
 
         matches = list(
-            Curtida.objects.filter(autor_id=meu_id, match=True).order_by("-criado_em")
+            Curtida.objects.filter(autor_id=meu_id, match=True).exclude(canal_id="")
         )
 
         perfis = {
@@ -426,15 +427,108 @@ class MatchesView(APIView):
             for p in Perfil.objects.filter(user_id__in=[m.alvo_id for m in matches])
         }
 
-        dados = []
+        itens = []
         for m in matches:
             perfil = perfis.get(m.alvo_id)
-            if perfil is not None:
-                dados.append(
+            if perfil is None:
+                continue
+
+            ultima = Mensagem.objects.filter(canal_id=m.canal_id).order_by("-id").first()
+            nao_lidas = (
+                Mensagem.objects.filter(canal_id=m.canal_id, lida=False)
+                .exclude(autor_id=meu_id)
+                .count()
+            )
+
+            texto_ultima = None
+            if ultima is not None:
+                prefixo = "Você: " if ultima.autor_id == meu_id else ""
+                texto_ultima = prefixo + ultima.texto
+
+            ordem = ultima.criado_em if ultima else m.criado_em
+            itens.append(
+                (
+                    ordem,
                     {
                         "canal_id": m.canal_id,
+                        "nome": perfil.nome,
+                        "curso": perfil.curso,
+                        "foto": perfil.fotos[0] if perfil.fotos else None,
+                        "ultima_mensagem": texto_ultima,
+                        "nao_lidas": nao_lidas,
                         "perfil": PerfilSerializer(perfil).data,
-                    }
+                    },
                 )
+            )
 
-        return Response(dados)
+        itens.sort(key=lambda t: t[0], reverse=True)
+        return Response([dados for _, dados in itens])
+
+
+def _formatar_mensagem(m, meu_id):
+    return {
+        "id": m.id,
+        "texto": m.texto,
+        "enviada_por_mim": m.autor_id == meu_id,
+        "criado_em": m.criado_em.isoformat(),
+    }
+
+
+class MensagensView(APIView):
+    """Histórico e envio de mensagens de um canal. Só quem tem o match acessa."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _tem_acesso(self, meu_id, canal_id):
+        return Curtida.objects.filter(
+            autor_id=meu_id, canal_id=canal_id, match=True
+        ).exists()
+
+    def get(self, request, canal_id):
+        meu_id = uuid.UUID(request.user.get("sub"))
+
+        if not self._tem_acesso(meu_id, canal_id):
+            return Response(
+                {"detail": "Conversa não encontrada."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Abrir a conversa marca as mensagens do outro lado como lidas
+        Mensagem.objects.filter(canal_id=canal_id, lida=False).exclude(
+            autor_id=meu_id
+        ).update(lida=True)
+
+        depois = request.query_params.get("depois")
+        if depois and depois.isdigit():
+            # Polling: só o que chegou depois da última mensagem conhecida
+            mensagens = Mensagem.objects.filter(
+                canal_id=canal_id, id__gt=int(depois)
+            ).order_by("id")
+        else:
+            # Carga inicial: últimas 100, em ordem cronológica
+            mensagens = list(
+                Mensagem.objects.filter(canal_id=canal_id).order_by("-id")[:100]
+            )[::-1]
+
+        return Response([_formatar_mensagem(m, meu_id) for m in mensagens])
+
+    def post(self, request, canal_id):
+        meu_id = uuid.UUID(request.user.get("sub"))
+
+        if not self._tem_acesso(meu_id, canal_id):
+            return Response(
+                {"detail": "Conversa não encontrada."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = EnviarMensagemSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        mensagem = Mensagem.objects.create(
+            canal_id=canal_id,
+            autor_id=meu_id,
+            texto=serializer.validated_data["texto"],
+        )
+        return Response(
+            _formatar_mensagem(mensagem, meu_id), status=status.HTTP_201_CREATED
+        )

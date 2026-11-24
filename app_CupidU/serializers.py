@@ -71,3 +71,6 @@ class PerfilSerializer(serializers.ModelSerializer):
 
 class RejeitarSerializer(serializers.Serializer):
     alvo_id = serializers.IntegerField()
+
+class EnviarMensagemSerializer(serializers.Serializer):
+    texto = serializers.CharField(max_length=2000)  # vazio/só espaços é rejeitado

@@ -12,7 +12,8 @@ from .views import (
     RejeitarView,
     CurtirView,
     CurtidasRecebidasView,
-    MatchesView
+    MatchesView,
+    MensagensView,
 
      # FlecharView,   # descomente quando a view do flechar estiver no views.py
 )
@@ -30,5 +31,6 @@ urlpatterns = [
     path("feed/rejeitar/", RejeitarView.as_view(), name="feed-rejeitar"),
     path("feed/curtidas/recebidas/", CurtidasRecebidasView.as_view(), name="curtidas-recebidas"),
     path("feed/matches/", MatchesView.as_view(), name="matches"),
+    path("feed/canais/<str:canal_id>/mensagens/", MensagensView.as_view(), name="mensagens"),
     # path("flechar/", FlecharView.as_view(), name="flechar"),
 ]

@@ -73,3 +73,20 @@ class Curtida(models.Model):
 
     def __str__(self):
         return f"{self.autor_id} -> {self.alvo_id} ({self.tipo}, match={self.match})"
+
+class Mensagem(models.Model):
+    """Mensagem trocada entre duas pessoas que têm match (identificadas pelo canal_id)."""
+
+    canal_id = models.CharField(max_length=64, db_index=True)
+    autor_id = models.UUIDField()
+    texto = models.TextField(max_length=2000)
+    lida = models.BooleanField(default=False)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "mensagens"
+        ordering = ["id"]
+        indexes = [models.Index(fields=["canal_id", "id"])]
+
+    def __str__(self):
+        return f"{self.autor_id} @ {self.canal_id}"
